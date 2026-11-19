@@ -55,25 +55,35 @@ const telegramService = {
 		const jwtToken = await jwtUtils.generateToken(c, { emailId: email.emailId })
 
 		const webAppUrl = customDomain ? `${domainUtils.toOssDomain(customDomain)}/api/telegram/getEmail/${jwtToken}` : 'https://www.cloudflare.com/404'
-		const inlineKeyboard = [
-			[
-				{
-					text: 'View',
-					web_app: { url: webAppUrl }
-				}
-			]
-		];
-
-		if (email.code) {
-			inlineKeyboard.push([
-				{
-					text: email.code,
-					copy_text: { text: email.code }
-				}
-			]);
-		}
+		// Tombol web_app HANYA boleh di private chat dengan bot (dok. Bot API:
+		// "Available only in private chats between a user and the bot") — di
+		// grup/supergroup Telegram menolak seluruh pesan dengan 400
+		// BUTTON_TYPE_INVALID. Karena itu untuk chat grup (ID negatif) tombol
+		// View dikirim sebagai url biasa (membuka halaman email yang sama di
+		// browser); di private chat tetap web_app seperti semula.
+		const buildKeyboard = (useWebApp) => {
+			const keyboard = [
+				[
+					{
+						text: 'View',
+						...(useWebApp ? { web_app: { url: webAppUrl } } : { url: webAppUrl })
+					}
+				]
+			];
+			if (email.code) {
+				keyboard.push([
+					{
+						text: email.code,
+						copy_text: { text: email.code }
+					}
+				]);
+			}
+			return keyboard;
+		};
 
 		await Promise.all(tgChatIds.map(async chatId => {
+			// ID chat grup/supergroup/channel selalu negatif; private chat positif.
+			const inlineKeyboard = buildKeyboard(!String(chatId).trim().startsWith('-'));
 			// Bila threadId diisi, kirim ke topik forum; bila topik tidak
 			// ditemukan (mis. topik dihapus), kirim ulang ke chat utama
 			// supaya notifikasi tidak hilang.
