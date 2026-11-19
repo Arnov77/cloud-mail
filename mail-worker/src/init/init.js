@@ -24,9 +24,19 @@ const dbInit = {
 		await this.v3_4DB(c);
 		await this.v3_5DB(c);
 		await this.v3_6DB(c);
+		await this.v3_7DB(c);
 		await userService.initAdmin(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	async v3_7DB(c) {
+		try {
+			// Telegram 通知发到论坛话题：0 = 主聊天（行为 lama）。
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN tg_thread_id INTEGER NOT NULL DEFAULT 0;`).run();
+		} catch (e) {
+			console.warn(`sql skip:${e.message}`);
+		}
 	},
 
 	async v3_6DB(c) {

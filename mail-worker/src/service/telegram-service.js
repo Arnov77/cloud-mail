@@ -46,9 +46,11 @@ const telegramService = {
 
 	async sendEmailToBot(c, email) {
 
-		const { tgBotToken, tgChatId, customDomain, tgMsgTo, tgMsgFrom, tgMsgText } = await settingService.query(c);
+		const { tgBotToken, tgChatId, tgThreadId, customDomain, tgMsgTo, tgMsgFrom, tgMsgText } = await settingService.query(c);
 
 		const tgChatIds = tgChatId.split(',');
+		// ID topik forum Telegram (0 = kirim ke chat utama, perilaku lama).
+		const threadId = Number(tgThreadId) || 0;
 
 		const jwtToken = await jwtUtils.generateToken(c, { emailId: email.emailId })
 
@@ -72,21 +74,35 @@ const telegramService = {
 		}
 
 		await Promise.all(tgChatIds.map(async chatId => {
-			try {
-				const res = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+			// Bila threadId diisi, kirim ke topik forum; bila topik tidak
+			// ditemukan (mis. topik dihapus), kirim ulang ke chat utama
+			// supaya notifikasi tidak hilang.
+			const sendOnce = (useThread) => {
+				const body = {
+					chat_id: chatId,
+					parse_mode: 'HTML',
+					text: emailMsgTemplate(email, tgMsgTo, tgMsgFrom, tgMsgText),
+					reply_markup: {
+						inline_keyboard: inlineKeyboard
+					}
+				};
+				if (useThread && threadId) {
+					body.message_thread_id = threadId;
+				}
+				return fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json'
 					},
-					body: JSON.stringify({
-						chat_id: chatId,
-						parse_mode: 'HTML',
-						text: emailMsgTemplate(email, tgMsgTo, tgMsgFrom, tgMsgText),
-						reply_markup: {
-							inline_keyboard: inlineKeyboard
-						}
-					})
+					body: JSON.stringify(body)
 				});
+			};
+			try {
+				let res = await sendOnce(true);
+				if (!res.ok && threadId) {
+					console.error(`转发 Telegram 到话题失败 status: ${res.status} response: ${await res.text()}，重试到主聊天`);
+					res = await sendOnce(false);
+				}
 				if (!res.ok) {
 					console.error(`转发 Telegram 失败 status: ${res.status} response: ${await res.text()}`);
 				}

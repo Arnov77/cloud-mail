@@ -1,0 +1,179 @@
+From 5a579d9b33bbb24faa9e8c7456e6a9dc92c7cd99 Mon Sep 17 00:00:00 2001
+From: Muse <muse@local>
+Date: Thu, 19 Nov 2026 13:25:35 +0700
+Subject: [PATCH] telegram notif ke topik forum (tg_thread_id) (local
+ checkpoint, do not push)
+
+---
+ mail-vue/src/i18n/en.js                     |  1 +
+ mail-vue/src/i18n/zh.js                     |  1 +
+ mail-vue/src/views/sys-setting/index.vue    |  4 +++
+ mail-worker/src/entity/setting.js           |  1 +
+ mail-worker/src/init/init.js                | 10 ++++++
+ mail-worker/src/service/telegram-service.js | 38 +++++++++++++++------
+ 6 files changed, 44 insertions(+), 11 deletions(-)
+
+diff --git a/mail-vue/src/i18n/en.js b/mail-vue/src/i18n/en.js
+index 1faf5f1..38834cc 100644
+--- a/mail-vue/src/i18n/en.js
++++ b/mail-vue/src/i18n/en.js
+@@ -224,6 +224,7 @@ const en = {
+     backgroundTitle: 'Change background',
+     tgBotDesc: 'Forward received emails to a Telegram bot',
+     tgBotToken: 'Bot token',
++    tgThreadIdDesc: 'Forum topic ID, empty = main chat',
+     toBotTokenDesc: 'Multiple user chat_ids, separated by commas',
+     otherEmailDesc: 'Emails can be forwarded to an external address, but must be verified via Cloudflare.',
+     otherEmailInputDesc: 'Separate multiple email addresses with commas',
+diff --git a/mail-vue/src/i18n/zh.js b/mail-vue/src/i18n/zh.js
+index 62bcdbe..afc5074 100644
+--- a/mail-vue/src/i18n/zh.js
++++ b/mail-vue/src/i18n/zh.js
+@@ -224,6 +224,7 @@ const zh = {
+     backgroundTitle: '设置背景',
+     tgBotDesc: '可以将接收的邮件转发到Tg机器人',
+     tgBotToken: '机器人 token',
++    tgThreadIdDesc: '论坛话题 ID，留空则发到主聊天',
+     toBotTokenDesc: '用户 chat_id 多个用,分开',
+     otherEmailDesc: '可以将邮件转到其他服务商邮箱，需要在cloudflare验证邮箱',
+     otherEmailInputDesc: '多个邮箱用, 分开',
+diff --git a/mail-vue/src/views/sys-setting/index.vue b/mail-vue/src/views/sys-setting/index.vue
+index 4d3d11c..5f52483 100644
+--- a/mail-vue/src/views/sys-setting/index.vue
++++ b/mail-vue/src/views/sys-setting/index.vue
+@@ -585,6 +585,7 @@
+           <el-input-tag tag-type="warning" :placeholder="$t('toBotTokenDesc')" v-model="tgChatId"
+                         @add-tag="addChatTag"></el-input-tag>
+           <el-input tag-type="warning" :placeholder="$t('customDomainDesc')" v-model="customDomain" @keyup.enter="tgBotSave"></el-input>
++          <el-input tag-type="warning" :placeholder="$t('tgThreadIdDesc')" v-model="tgThreadId" @keyup.enter="tgBotSave"></el-input>
+           <div class="tg-msg-label">
+             <span>{{t('from')}}</span>
+             <el-select  v-model="tgMsgFrom" >
+@@ -1052,6 +1053,7 @@ const tgChatId = ref([])
+ const customDomain = ref('')
+ const tgBotStatus = ref(0)
+ const tgBotToken = ref('')
++const tgThreadId = ref('')
+ const forwardEmail = ref([])
+ const forwardStatus = ref(0)
+ const webhookUrl = ref('')
+@@ -1217,6 +1219,7 @@ function closedSetBackground() {
+ function openTgSetting() {
+   tgBotStatus.value = setting.value.tgBotStatus
+   tgBotToken.value = ''
++  tgThreadId.value = setting.value.tgThreadId ? String(setting.value.tgThreadId) : ''
+   customDomain.value = setting.value.customDomain
+   tgMsgFrom.value = setting.value.tgMsgFrom
+   tgMsgText.value = setting.value.tgMsgText
+@@ -1376,6 +1379,7 @@ function tgBotSave() {
+     customDomain: customDomain.value,
+     tgBotStatus: tgBotStatus.value,
+     tgChatId: tgChatId.value + '',
++    tgThreadId: Number(tgThreadId.value) || 0,
+     tgMsgFrom: tgMsgFrom.value,
+     tgMsgText: tgMsgText.value,
+     tgMsgTo: tgMsgTo.value
+diff --git a/mail-worker/src/entity/setting.js b/mail-worker/src/entity/setting.js
+index 9e943a0..50df7e6 100644
+--- a/mail-worker/src/entity/setting.js
++++ b/mail-worker/src/entity/setting.js
+@@ -21,6 +21,7 @@ export const setting = sqliteTable('setting', {
+ 	tgBotToken: text('tg_bot_token').default('').notNull(),
+ 	tgChatId: text('tg_chat_id').default('').notNull(),
+ 	tgBotStatus: integer('tg_bot_status').default(1).notNull(),
++	tgThreadId: integer('tg_thread_id').default(0).notNull(),
+ 	forwardEmail: text('forward_email').default('').notNull(),
+ 	forwardStatus: integer('forward_status').default(1).notNull(),
+ 	ruleEmail: text('rule_email').default('').notNull(),
+diff --git a/mail-worker/src/init/init.js b/mail-worker/src/init/init.js
+index 435dc0a..df3fff3 100644
+--- a/mail-worker/src/init/init.js
++++ b/mail-worker/src/init/init.js
+@@ -24,11 +24,21 @@ const dbInit = {
+ 		await this.v3_4DB(c);
+ 		await this.v3_5DB(c);
+ 		await this.v3_6DB(c);
++		await this.v3_7DB(c);
+ 		await userService.initAdmin(c);
+ 		await settingService.refresh(c);
+ 		return c.text('success');
+ 	},
+ 
++	async v3_7DB(c) {
++		try {
++			// Telegram 通知发到论坛话题：0 = 主聊天（行为 lama）。
++			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN tg_thread_id INTEGER NOT NULL DEFAULT 0;`).run();
++		} catch (e) {
++			console.warn(`sql skip:${e.message}`);
++		}
++	},
++
+ 	async v3_6DB(c) {
+ 		try {
+ 			// 保留当前的 1（关闭）和 2（开启），只转换旧版的关闭值和刷新间隔。
+diff --git a/mail-worker/src/service/telegram-service.js b/mail-worker/src/service/telegram-service.js
+index 97760e0..4877498 100644
+--- a/mail-worker/src/service/telegram-service.js
++++ b/mail-worker/src/service/telegram-service.js
+@@ -46,9 +46,11 @@ const telegramService = {
+ 
+ 	async sendEmailToBot(c, email) {
+ 
+-		const { tgBotToken, tgChatId, customDomain, tgMsgTo, tgMsgFrom, tgMsgText } = await settingService.query(c);
++		const { tgBotToken, tgChatId, tgThreadId, customDomain, tgMsgTo, tgMsgFrom, tgMsgText } = await settingService.query(c);
+ 
+ 		const tgChatIds = tgChatId.split(',');
++		// ID topik forum Telegram (0 = kirim ke chat utama, perilaku lama).
++		const threadId = Number(tgThreadId) || 0;
+ 
+ 		const jwtToken = await jwtUtils.generateToken(c, { emailId: email.emailId })
+ 
+@@ -72,21 +74,35 @@ const telegramService = {
+ 		}
+ 
+ 		await Promise.all(tgChatIds.map(async chatId => {
+-			try {
+-				const res = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
++			// Bila threadId diisi, kirim ke topik forum; bila topik tidak
++			// ditemukan (mis. topik dihapus), kirim ulang ke chat utama
++			// supaya notifikasi tidak hilang.
++			const sendOnce = (useThread) => {
++				const body = {
++					chat_id: chatId,
++					parse_mode: 'HTML',
++					text: emailMsgTemplate(email, tgMsgTo, tgMsgFrom, tgMsgText),
++					reply_markup: {
++						inline_keyboard: inlineKeyboard
++					}
++				};
++				if (useThread && threadId) {
++					body.message_thread_id = threadId;
++				}
++				return fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+ 					method: 'POST',
+ 					headers: {
+ 						'Content-Type': 'application/json'
+ 					},
+-					body: JSON.stringify({
+-						chat_id: chatId,
+-						parse_mode: 'HTML',
+-						text: emailMsgTemplate(email, tgMsgTo, tgMsgFrom, tgMsgText),
+-						reply_markup: {
+-							inline_keyboard: inlineKeyboard
+-						}
+-					})
++					body: JSON.stringify(body)
+ 				});
++			};
++			try {
++				let res = await sendOnce(true);
++				if (!res.ok && threadId) {
++					console.error(`转发 Telegram 到话题失败 status: ${res.status} response: ${await res.text()}，重试到主聊天`);
++					res = await sendOnce(false);
++				}
+ 				if (!res.ok) {
+ 					console.error(`转发 Telegram 失败 status: ${res.status} response: ${await res.text()}`);
+ 				}
+-- 
+2.43.0
+

@@ -224,6 +224,7 @@ const zh = {
     backgroundTitle: '设置背景',
     tgBotDesc: '可以将接收的邮件转发到Tg机器人',
     tgBotToken: '机器人 token',
+    tgThreadIdDesc: '论坛话题 ID，留空则发到主聊天',
     toBotTokenDesc: '用户 chat_id 多个用,分开',
     otherEmailDesc: '可以将邮件转到其他服务商邮箱，需要在cloudflare验证邮箱',
     otherEmailInputDesc: '多个邮箱用, 分开',

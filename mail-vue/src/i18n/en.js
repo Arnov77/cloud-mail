@@ -224,6 +224,7 @@ const en = {
     backgroundTitle: 'Change background',
     tgBotDesc: 'Forward received emails to a Telegram bot',
     tgBotToken: 'Bot token',
+    tgThreadIdDesc: 'Forum topic ID, empty = main chat',
     toBotTokenDesc: 'Multiple user chat_ids, separated by commas',
     otherEmailDesc: 'Emails can be forwarded to an external address, but must be verified via Cloudflare.',
     otherEmailInputDesc: 'Separate multiple email addresses with commas',

@@ -585,6 +585,7 @@
           <el-input-tag tag-type="warning" :placeholder="$t('toBotTokenDesc')" v-model="tgChatId"
                         @add-tag="addChatTag"></el-input-tag>
           <el-input tag-type="warning" :placeholder="$t('customDomainDesc')" v-model="customDomain" @keyup.enter="tgBotSave"></el-input>
+          <el-input tag-type="warning" :placeholder="$t('tgThreadIdDesc')" v-model="tgThreadId" @keyup.enter="tgBotSave"></el-input>
           <div class="tg-msg-label">
             <span>{{t('from')}}</span>
             <el-select  v-model="tgMsgFrom" >
@@ -1052,6 +1053,7 @@ const tgChatId = ref([])
 const customDomain = ref('')
 const tgBotStatus = ref(0)
 const tgBotToken = ref('')
+const tgThreadId = ref('')
 const forwardEmail = ref([])
 const forwardStatus = ref(0)
 const webhookUrl = ref('')
@@ -1217,6 +1219,7 @@ function closedSetBackground() {
 function openTgSetting() {
   tgBotStatus.value = setting.value.tgBotStatus
   tgBotToken.value = ''
+  tgThreadId.value = setting.value.tgThreadId ? String(setting.value.tgThreadId) : ''
   customDomain.value = setting.value.customDomain
   tgMsgFrom.value = setting.value.tgMsgFrom
   tgMsgText.value = setting.value.tgMsgText
@@ -1376,6 +1379,7 @@ function tgBotSave() {
     customDomain: customDomain.value,
     tgBotStatus: tgBotStatus.value,
     tgChatId: tgChatId.value + '',
+    tgThreadId: Number(tgThreadId.value) || 0,
     tgMsgFrom: tgMsgFrom.value,
     tgMsgText: tgMsgText.value,
     tgMsgTo: tgMsgTo.value
